@@ -389,7 +389,7 @@ Edit Issue
 A 3–5 minute demonstration video is provided showing the main functionality of ResolveX.
 
 **Demo Video:**
-`<ADD_YOUR_GOOGLE_DRIVE_OR_VIDEO_LINK_HERE>`
+
 
 ---
 
@@ -425,8 +425,5 @@ Potential future enhancements include:
 Information Technology Undergraduate
 Sri Lanka Institute of Information Technology (SLIIT)
 
----
 
-## 📄 License
 
-This project was developed for educational purposes as an individual academic assignment.
