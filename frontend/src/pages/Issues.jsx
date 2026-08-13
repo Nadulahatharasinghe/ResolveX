@@ -229,7 +229,8 @@ const Issues = () => {
                   {issues.map((issue) => {
                     const creatorId = issue.createdBy?._id || issue.createdBy;
                     const currentUserId = user?._id || user?.id;
-                    const isOwner = creatorId === currentUserId;
+                    const isOwner = creatorId?.toString() === currentUserId?.toString();
+                    const canEdit   = isAdmin || isOwner;
                     const canDelete = isAdmin || isOwner;
 
                     return (
@@ -276,12 +277,14 @@ const Issues = () => {
                           >
                             View
                           </button>
-                          <button
-                            onClick={() => navigate(`/issues/${issue._id}/edit`)}
-                            style={styles.editActionBtn}
-                          >
-                            Edit
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => navigate(`/issues/${issue._id}/edit`)}
+                              style={styles.editActionBtn}
+                            >
+                              Edit
+                            </button>
+                          )}
                           {canDelete && (
                             <button
                               onClick={() => handleDelete(issue._id, issue.title, creatorId)}

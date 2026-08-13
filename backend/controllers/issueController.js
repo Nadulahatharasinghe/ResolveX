@@ -9,7 +9,7 @@ exports.createIssue = async (req, res) => {
   try {
     const { title, description, issueType, priority, status, assignee, dueDate } = req.body;
 
-    // 1. Input Validation
+    // Input Validation
     if (!title || !description || !issueType || !priority) {
       return res.status(400).json({
         success: false,
@@ -17,48 +17,32 @@ exports.createIssue = async (req, res) => {
       });
     }
 
-    // Validate enums
     if (!['Bug', 'Task'].includes(issueType)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Issue type must be Bug or Task'
-      });
+      return res.status(400).json({ success: false, message: 'Issue type must be Bug or Task' });
     }
 
     if (!['Low', 'Medium', 'High'].includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Priority must be Low, Medium, or High'
-      });
+      return res.status(400).json({ success: false, message: 'Priority must be Low, Medium, or High' });
     }
 
     if (status && !['Open', 'In Progress', 'Resolved', 'Closed'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Status must be Open, In Progress, Resolved, or Closed'
-      });
+      return res.status(400).json({ success: false, message: 'Status must be Open, In Progress, Resolved, or Closed' });
     }
 
-    // 2. Validate Assignee User if provided
+    // Validate assignee if provided
     let assigneeId = null;
     if (assignee && assignee.trim() !== '') {
       if (!mongoose.Types.ObjectId.isValid(assignee)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid assignee user ID'
-        });
+        return res.status(400).json({ success: false, message: 'Invalid assignee user ID' });
       }
       const existingAssignee = await User.findById(assignee);
       if (!existingAssignee) {
-        return res.status(400).json({
-          success: false,
-          message: 'Assignee user not found'
-        });
+        return res.status(400).json({ success: false, message: 'Assignee user not found' });
       }
       assigneeId = assignee;
     }
 
-    // 3. Create Issue (createdBy automatically set from req.user)
+    // createdBy is always set from the authenticated user — never from req.body
     const issue = await Issue.create({
       title,
       description,
@@ -70,7 +54,6 @@ exports.createIssue = async (req, res) => {
       createdBy: req.user._id
     });
 
-    // Populate user references before returning
     const populatedIssue = await Issue.findById(issue._id)
       .populate('assignee', 'name email')
       .populate('createdBy', 'name email');
@@ -82,35 +65,35 @@ exports.createIssue = async (req, res) => {
     });
   } catch (error) {
     console.error('Create issue error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error creating issue'
-    });
+    res.status(500).json({ success: false, message: 'Server error creating issue' });
   }
 };
 
-// @desc    Get all issues with optional search & filters
+// @desc    Get issues with optional search & filters
+//          Admin  → all issues
+//          User   → only their own issues
 // @route   GET /api/issues
 // @access  Private
 exports.getIssues = async (req, res) => {
   try {
     const { search, status, priority, issueType } = req.query;
-    const filter = {};
+    const isAdmin = req.user.role === 'admin';
 
-    // 1. Filter by status, priority, issueType
+    // Ownership filter: normal users only see their own issues
+    const filter = isAdmin ? {} : { createdBy: req.user._id };
+
+    // Status / priority / type filters
     if (status && ['Open', 'In Progress', 'Resolved', 'Closed'].includes(status)) {
       filter.status = status;
     }
-
     if (priority && ['Low', 'Medium', 'High'].includes(priority)) {
       filter.priority = priority;
     }
-
     if (issueType && ['Bug', 'Task'].includes(issueType)) {
       filter.issueType = issueType;
     }
 
-    // 2. Search title & description (case-insensitive regex)
+    // Full-text search across title & description
     if (search && search.trim() !== '') {
       const searchRegex = new RegExp(search.trim(), 'i');
       filter.$or = [
@@ -119,27 +102,21 @@ exports.getIssues = async (req, res) => {
       ];
     }
 
-    // 3. Fetch from MongoDB, sorted by newest first
     const issues = await Issue.find(filter)
       .sort({ createdAt: -1 })
       .populate('assignee', 'name email')
       .populate('createdBy', 'name email');
 
-    res.json({
-      success: true,
-      count: issues.length,
-      data: issues
-    });
+    res.json({ success: true, count: issues.length, data: issues });
   } catch (error) {
     console.error('Get issues error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error retrieving issues'
-    });
+    res.status(500).json({ success: false, message: 'Server error retrieving issues' });
   }
 };
 
 // @desc    Get single issue by ID
+//          Admin  → any issue
+//          User   → only own issue (403 otherwise)
 // @route   GET /api/issues/:id
 // @access  Private
 exports.getIssueById = async (req, res) => {
@@ -147,10 +124,7 @@ exports.getIssueById = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid issue ID format'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid issue ID format' });
     }
 
     const issue = await Issue.findById(id)
@@ -158,26 +132,32 @@ exports.getIssueById = async (req, res) => {
       .populate('createdBy', 'name email');
 
     if (!issue) {
-      return res.status(404).json({
+      return res.status(404).json({ success: false, message: 'Issue not found' });
+    }
+
+    // Ownership check
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = issue.createdBy._id
+      ? issue.createdBy._id.toString() === req.user._id.toString()
+      : issue.createdBy.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
         success: false,
-        message: 'Issue not found'
+        message: 'You are not authorized to access this issue'
       });
     }
 
-    res.json({
-      success: true,
-      data: issue
-    });
+    res.json({ success: true, data: issue });
   } catch (error) {
     console.error('Get issue by ID error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error retrieving issue'
-    });
+    res.status(500).json({ success: false, message: 'Server error retrieving issue' });
   }
 };
 
 // @desc    Update an issue
+//          Admin  → can update any issue including status
+//          User   → can update own issue fields EXCEPT status (403 on status change)
 // @route   PUT /api/issues/:id
 // @access  Private
 exports.updateIssue = async (req, res) => {
@@ -185,34 +165,36 @@ exports.updateIssue = async (req, res) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid issue ID format'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid issue ID format' });
     }
 
-    let issue = await Issue.findById(id);
+    const issue = await Issue.findById(id);
 
     if (!issue) {
-      return res.status(404).json({
+      return res.status(404).json({ success: false, message: 'Issue not found' });
+    }
+
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = issue.createdBy.toString() === req.user._id.toString();
+
+    // Only creator or admin can modify this issue at all
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({
         success: false,
-        message: 'Issue not found'
+        message: 'You can only modify your own issues'
       });
     }
 
-    // Authorization: creator or admin can update
-    const isAdmin = req.user.role === 'admin';
-    const isCreator = issue.createdBy.toString() === req.user._id.toString();
-    if (!isCreator && !isAdmin) {
+    // Normal users cannot change status — only admins
+    if (!isAdmin && req.body.status !== undefined) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to update this issue. Only the issue creator or an admin can update it.'
+        message: 'Only administrators can change issue status'
       });
     }
 
     const { title, description, issueType, priority, status, assignee, dueDate } = req.body;
 
-    // Validate fields if provided
     if (title !== undefined) {
       if (!title || title.trim() === '') {
         return res.status(400).json({ success: false, message: 'Title cannot be empty' });
@@ -241,6 +223,7 @@ exports.updateIssue = async (req, res) => {
       issue.priority = priority;
     }
 
+    // status — only reachable by admins (non-admins are rejected above)
     if (status !== undefined) {
       if (!['Open', 'In Progress', 'Resolved', 'Closed'].includes(status)) {
         return res.status(400).json({ success: false, message: 'Status must be Open, In Progress, Resolved, or Closed' });
@@ -273,66 +256,47 @@ exports.updateIssue = async (req, res) => {
       .populate('assignee', 'name email')
       .populate('createdBy', 'name email');
 
-    res.json({
-      success: true,
-      message: 'Issue updated successfully',
-      data: updatedIssue
-    });
+    res.json({ success: true, message: 'Issue updated successfully', data: updatedIssue });
   } catch (error) {
     console.error('Update issue error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error updating issue'
-    });
+    res.status(500).json({ success: false, message: 'Server error updating issue' });
   }
 };
 
-
-
 // @desc    Delete an issue
+//          Admin  → any issue
+//          User   → only own issue
 // @route   DELETE /api/issues/:id
-// @access  Private (Creator only)
+// @access  Private
 exports.deleteIssue = async (req, res) => {
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid issue ID format'
-      });
+      return res.status(400).json({ success: false, message: 'Invalid issue ID format' });
     }
 
     const issue = await Issue.findById(id);
 
     if (!issue) {
-      return res.status(404).json({
-        success: false,
-        message: 'Issue not found'
-      });
+      return res.status(404).json({ success: false, message: 'Issue not found' });
     }
 
-    // Authorization: creator or admin can delete
     const isAdmin = req.user.role === 'admin';
-    const isCreator = issue.createdBy.toString() === req.user._id.toString();
-    if (!isCreator && !isAdmin) {
+    const isOwner = issue.createdBy.toString() === req.user._id.toString();
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to delete this issue. Only the issue creator or an admin can delete it.'
+        message: 'You can only delete your own issues'
       });
     }
 
     await issue.deleteOne();
 
-    res.json({
-      success: true,
-      message: 'Issue deleted successfully'
-    });
+    res.json({ success: true, message: 'Issue deleted successfully' });
   } catch (error) {
     console.error('Delete issue error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error deleting issue'
-    });
+    res.status(500).json({ success: false, message: 'Server error deleting issue' });
   }
 };

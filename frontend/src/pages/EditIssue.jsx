@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { getIssueById, updateIssue, getUsers } from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 
 const EditIssue = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === 'admin';
 
   const [formData, setFormData] = useState({
     title: '',
@@ -52,7 +55,14 @@ const EditIssue = () => {
         });
       } catch (err) {
         console.error('Edit issue fetch error:', err);
-        setError(err.response?.data?.message || 'Failed to load issue data');
+        const status = err.response?.status;
+        if (status === 403) {
+          setError('You are not authorized to edit this issue.');
+        } else if (status === 404) {
+          setError('Issue not found.');
+        } else {
+          setError(err.response?.data?.message || 'Failed to load issue data');
+        }
       } finally {
         setLoading(false);
       }
@@ -89,7 +99,8 @@ const EditIssue = () => {
         description: description.trim(),
         issueType,
         priority,
-        status,
+        // Only admins can submit a status change — non-admins omit it entirely
+        ...(isAdmin ? { status } : {}),
         assignee: assignee || null,
         dueDate: dueDate || null
       };
@@ -97,7 +108,12 @@ const EditIssue = () => {
       await updateIssue(id, payload);
       navigate(`/issues/${id}`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update issue');
+      const status = err.response?.status;
+      if (status === 403) {
+        setError(err.response?.data?.message || 'You are not authorized to edit this issue.');
+      } else {
+        setError(err.response?.data?.message || 'Failed to update issue');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -109,6 +125,22 @@ const EditIssue = () => {
         <Navbar />
         <div style={styles.loadingContainer}>
           <p>Loading issue for editing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error page for 403/404 instead of a broken form
+  if (error && !formData.title) {
+    return (
+      <div>
+        <Navbar />
+        <div style={styles.errorContainer}>
+          <h2>{error.includes('authorized') ? 'Access Denied' : 'Error'}</h2>
+          <p style={{ color: '#64748b', marginTop: '8px', marginBottom: '20px' }}>{error}</p>
+          <button onClick={() => navigate('/issues')} style={styles.backBtn}>
+            ← Back to Issues
+          </button>
         </div>
       </div>
     );
@@ -177,18 +209,22 @@ const EditIssue = () => {
 
               <div style={styles.col}>
                 <label style={styles.label}>Status</label>
-                <select
-                  name="status"
-                  value={status}
-                  onChange={onChange}
-                  style={styles.select}
-                  id="edit-issue-status"
-                >
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Resolved">Resolved</option>
-                  <option value="Closed">Closed</option>
-                </select>
+                {isAdmin ? (
+                  <select
+                    name="status"
+                    value={status}
+                    onChange={onChange}
+                    style={styles.select}
+                    id="edit-issue-status"
+                  >
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                ) : (
+                  <div style={styles.statusReadOnly}>{status}</div>
+                )}
               </div>
             </div>
 
@@ -383,6 +419,34 @@ const styles = {
     borderRadius: '6px',
     cursor: 'pointer',
     fontWeight: '600',
+    fontSize: '14px'
+  },
+  statusReadOnly: {
+    padding: '10px 12px',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    fontSize: '14px',
+    backgroundColor: '#f8fafc',
+    color: '#475569',
+    fontWeight: '500'
+  },
+  errorContainer: {
+    textAlign: 'center',
+    padding: '60px 20px',
+    backgroundColor: '#fff',
+    maxWidth: '500px',
+    margin: '50px auto',
+    borderRadius: '10px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+  },
+  backBtn: {
+    padding: '10px 20px',
+    backgroundColor: '#4f46e5',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '500',
     fontSize: '14px'
   }
 };
