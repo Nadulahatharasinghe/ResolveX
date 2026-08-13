@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const res = await api.get('/auth/me');
-          setUser(res.data.user);
+          setUser(res.data.user); // includes id, name, email, role
         } catch (err) {
           console.error('Failed to load user:', err);
           localStorage.removeItem('token');
@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
   const login = (userData, userToken) => {
     localStorage.setItem('token', userToken);
     setToken(userToken);
-    setUser(userData);
+    setUser(userData); // userData includes role from login response
   };
 
   const logout = () => {
@@ -46,6 +46,7 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         isAuthenticated: !!user,
+        isAdmin: user?.role === 'admin',
         login,
         logout
       }}

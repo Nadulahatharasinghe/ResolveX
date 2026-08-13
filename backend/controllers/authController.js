@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 // @access  Public
 exports.register = async (req, res) => {
   try {
+    // SECURITY: only accept name/email/password — role is always forced to 'user'
     const { name, email, password } = req.body;
 
     // Validate input
@@ -47,11 +48,12 @@ exports.register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create user
+    // Create user — role is hard-coded to 'user'; client cannot override this
     const user = await User.create({
       name,
       email: email.toLowerCase(),
-      password: hashedPassword
+      password: hashedPassword,
+      role: 'user'
     });
 
     res.status(201).json({
@@ -60,7 +62,8 @@ exports.register = async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role
       }
     });
   } catch (error) {
@@ -87,7 +90,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Find user and include password
+    // Find user and include password for comparison
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user) {
       return res.status(401).json({
@@ -105,7 +108,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate JWT
+    // Generate JWT (stores only user id — role is fetched fresh from DB on each request)
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
@@ -118,7 +121,8 @@ exports.login = async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role || 'user'
       }
     });
   } catch (error) {
@@ -130,18 +134,20 @@ exports.login = async (req, res) => {
   }
 };
 
-// @desc    Get current logged in user
+// @desc    Get current logged-in user
 // @route   GET /api/auth/me
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    // req.user is already populated by protect middleware (fresh from DB)
+    const user = req.user;
     res.json({
       success: true,
       user: {
         id: user._id,
         name: user.name,
-        email: user.email
+        email: user.email,
+        role: user.role || 'user'
       }
     });
   } catch (error) {
@@ -155,10 +161,14 @@ exports.getMe = async (req, res) => {
 
 // @desc    Get all users for assignee selection
 // @route   GET /api/auth/users
-// @access  Private
+// @access  Private (authenticated users — needed for assignee dropdown)
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find({}).select('_id name email').sort({ name: 1 });
+    // Return only safe fields — never expose password or sensitive data
+    const users = await User.find({})
+      .select('_id name email role')
+      .sort({ name: 1 });
+
     res.json({
       success: true,
       data: users
@@ -171,4 +181,3 @@ exports.getUsers = async (req, res) => {
     });
   }
 };
-

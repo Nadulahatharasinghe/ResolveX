@@ -200,6 +200,16 @@ exports.updateIssue = async (req, res) => {
       });
     }
 
+    // Authorization: creator or admin can update
+    const isAdmin = req.user.role === 'admin';
+    const isCreator = issue.createdBy.toString() === req.user._id.toString();
+    if (!isCreator && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this issue. Only the issue creator or an admin can update it.'
+      });
+    }
+
     const { title, description, issueType, priority, status, assignee, dueDate } = req.body;
 
     // Validate fields if provided
@@ -277,6 +287,8 @@ exports.updateIssue = async (req, res) => {
   }
 };
 
+
+
 // @desc    Delete an issue
 // @route   DELETE /api/issues/:id
 // @access  Private (Creator only)
@@ -300,11 +312,13 @@ exports.deleteIssue = async (req, res) => {
       });
     }
 
-    // Creator authorization check
-    if (issue.createdBy.toString() !== req.user._id.toString()) {
+    // Authorization: creator or admin can delete
+    const isAdmin = req.user.role === 'admin';
+    const isCreator = issue.createdBy.toString() === req.user._id.toString();
+    if (!isCreator && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to delete this issue. Only the issue creator can delete it.'
+        message: 'Not authorized to delete this issue. Only the issue creator or an admin can delete it.'
       });
     }
 

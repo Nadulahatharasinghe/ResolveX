@@ -4,10 +4,20 @@ import Navbar from '../components/Navbar';
 import { getIssueById, updateIssue, deleteIssue } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
+// Translate HTTP status codes to user-friendly messages
+const getErrorMessage = (err) => {
+  const status = err.response?.status;
+  if (status === 401) return 'You must be logged in to perform this action.';
+  if (status === 403) return 'You do not have permission to perform this action.';
+  if (status === 404) return 'Issue not found.';
+  return err.response?.data?.message || 'An unexpected error occurred.';
+};
+
 const IssueDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === 'admin';
 
   const [issue, setIssue] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +52,7 @@ const IssueDetails = () => {
       setSuccessMsg(`Status updated to "${newStatus}"`);
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update status');
+      setError(getErrorMessage(err));
     } finally {
       setStatusUpdating(false);
     }
@@ -51,9 +61,10 @@ const IssueDetails = () => {
   const handleDelete = async () => {
     const creatorId = issue?.createdBy?._id || issue?.createdBy;
     const currentUserId = user?._id || user?.id;
+    const canDelete = isAdmin || creatorId === currentUserId;
 
-    if (creatorId !== currentUserId) {
-      alert('Only the creator of this issue can delete it.');
+    if (!canDelete) {
+      setError('Only the creator or an admin can delete this issue.');
       return;
     }
 
@@ -62,7 +73,7 @@ const IssueDetails = () => {
         await deleteIssue(id);
         navigate('/issues');
       } catch (err) {
-        alert(err.response?.data?.message || 'Failed to delete issue');
+        setError(getErrorMessage(err));
       }
     }
   };
@@ -117,6 +128,7 @@ const IssueDetails = () => {
   const creatorId = issue.createdBy?._id || issue.createdBy;
   const currentUserId = user?._id || user?.id;
   const isOwner = creatorId === currentUserId;
+  const canDelete = isAdmin || isOwner;
 
   return (
     <div>
@@ -129,6 +141,7 @@ const IssueDetails = () => {
         </div>
 
         {successMsg && <div style={styles.successBanner}>{successMsg}</div>}
+        {error && <div style={styles.errorBanner}>{error}</div>}
 
         <div style={styles.mainCard}>
           {/* Top Header Row */}
@@ -153,7 +166,7 @@ const IssueDetails = () => {
               >
                 Edit Issue
               </button>
-              {isOwner && (
+              {canDelete && (
                 <button
                   onClick={handleDelete}
                   style={styles.deleteBtn}
@@ -274,6 +287,14 @@ const styles = {
   successBanner: {
     backgroundColor: '#d1fae5',
     color: '#059669',
+    padding: '12px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    fontSize: '14px'
+  },
+  errorBanner: {
+    backgroundColor: '#fee2e2',
+    color: '#dc2626',
     padding: '12px',
     borderRadius: '8px',
     marginBottom: '20px',
