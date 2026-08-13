@@ -1,5 +1,26 @@
 const mongoose = require('mongoose');
 
+const statusHistorySchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      required: true,
+      enum: ['Open', 'In Progress', 'Resolved', 'Closed']
+    },
+    comment: {
+      type: String,
+      required: [true, 'A description is required when changing status'],
+      trim: true
+    },
+    changedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    }
+  },
+  { timestamps: true }
+);
+
 const issueSchema = new mongoose.Schema(
   {
     title: {
@@ -52,6 +73,11 @@ const issueSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'Issue must have a creator']
+    },
+    // History of every status change with mandatory comment
+    statusHistory: {
+      type: [statusHistorySchema],
+      default: []
     }
   },
   {

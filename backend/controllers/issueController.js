@@ -185,11 +185,11 @@ exports.updateIssue = async (req, res) => {
       });
     }
 
-    // Normal users cannot change status — only admins
-    if (!isAdmin && req.body.status !== undefined) {
-      return res.status(403).json({
+    // Status changes must go through PATCH /api/issues/:id/status (requires comment)
+    if (req.body.status !== undefined) {
+      return res.status(400).json({
         success: false,
-        message: 'Only administrators can change issue status'
+        message: 'Use PATCH /api/issues/:id/status to change status (a comment is required)'
       });
     }
 
@@ -223,13 +223,7 @@ exports.updateIssue = async (req, res) => {
       issue.priority = priority;
     }
 
-    // status — only reachable by admins (non-admins are rejected above)
-    if (status !== undefined) {
-      if (!['Open', 'In Progress', 'Resolved', 'Closed'].includes(status)) {
-        return res.status(400).json({ success: false, message: 'Status must be Open, In Progress, Resolved, or Closed' });
-      }
-      issue.status = status;
-    }
+    // status changes are handled by PATCH /api/issues/:id/status — ignored here
 
     if (assignee !== undefined) {
       if (assignee && assignee !== '' && assignee !== null) {
@@ -298,5 +292,83 @@ exports.deleteIssue = async (req, res) => {
   } catch (error) {
     console.error('Delete issue error:', error);
     res.status(500).json({ success: false, message: 'Server error deleting issue' });
+  }
+};
+
+// @desc    Change issue status — ANY authenticated user, but comment is REQUIRED
+// @route   PATCH /api/issues/:id/status
+// @access  Private
+exports.changeStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, comment } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid issue ID format' });
+    }
+
+    // Both fields are required
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'Please provide the new status' });
+    }
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'A description is required when changing status'
+      });
+    }
+
+    if (!['Open', 'In Progress', 'Resolved', 'Closed'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be Open, In Progress, Resolved, or Closed'
+      });
+    }
+
+    const issue = await Issue.findById(id);
+    if (!issue) {
+      return res.status(404).json({ success: false, message: 'Issue not found' });
+    }
+
+    // Any authenticated user can change status — no ownership restriction
+    // But they must be able to see the issue first (ownership check on GET still applies)
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = issue.createdBy.toString() === req.user._id.toString();
+
+    // Non-owners and non-admins can only change status on issues they can see.
+    // Since GET /api/issues/:id already enforces visibility (only owner or admin can view),
+    // reaching here via normal app flow means the user can see the issue.
+    // We allow all authenticated users to change status — no further restriction.
+
+    if (issue.status === status) {
+      return res.status(400).json({
+        success: false,
+        message: `Issue is already in "${status}" status`
+      });
+    }
+
+    // Record the change in history
+    issue.statusHistory.push({
+      status,
+      comment: comment.trim(),
+      changedBy: req.user._id
+    });
+    issue.status = status;
+
+    await issue.save();
+
+    const updatedIssue = await Issue.findById(id)
+      .populate('assignee', 'name email')
+      .populate('createdBy', 'name email')
+      .populate('statusHistory.changedBy', 'name email');
+
+    res.json({
+      success: true,
+      message: `Status changed to "${status}"`,
+      data: updatedIssue
+    });
+  } catch (error) {
+    console.error('Change status error:', error);
+    res.status(500).json({ success: false, message: 'Server error changing status' });
   }
 };

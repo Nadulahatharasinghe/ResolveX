@@ -5,7 +5,8 @@ const {
   getIssues,
   getIssueById,
   updateIssue,
-  deleteIssue
+  deleteIssue,
+  changeStatus
 } = require('../controllers/issueController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -20,5 +21,8 @@ router.route('/:id')
   .get(getIssueById)
   .put(updateIssue)
   .delete(deleteIssue);
+
+// Status change — any authenticated user, comment required
+router.patch('/:id/status', changeStatus);
 
 module.exports = router;

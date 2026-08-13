@@ -28,6 +28,7 @@ export const getIssueById = (id)           => api.get(`/issues/${id}`);
 export const createIssue  = (issueData)    => api.post('/issues', issueData);
 export const updateIssue  = (id, issueData)=> api.put(`/issues/${id}`, issueData);
 export const deleteIssue  = (id)           => api.delete(`/issues/${id}`);
+export const changeStatus = (id, status, comment) => api.patch(`/issues/${id}/status`, { status, comment });
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const getAdminStats      = ()              => api.get('/admin/stats');

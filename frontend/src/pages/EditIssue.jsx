@@ -8,7 +8,8 @@ const EditIssue = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const isAdmin = user?.role === 'admin';
+  // isAdmin kept for potential future use; status is no longer editable here
+  const isAdmin = user?.role === 'admin'; // eslint-disable-line no-unused-vars
 
   const [formData, setFormData] = useState({
     title: '',
@@ -99,8 +100,7 @@ const EditIssue = () => {
         description: description.trim(),
         issueType,
         priority,
-        // Only admins can submit a status change — non-admins omit it entirely
-        ...(isAdmin ? { status } : {}),
+        // status is managed via the status-change flow on the detail page (requires comment)
         assignee: assignee || null,
         dueDate: dueDate || null
       };
@@ -209,22 +209,12 @@ const EditIssue = () => {
 
               <div style={styles.col}>
                 <label style={styles.label}>Status</label>
-                {isAdmin ? (
-                  <select
-                    name="status"
-                    value={status}
-                    onChange={onChange}
-                    style={styles.select}
-                    id="edit-issue-status"
-                  >
-                    <option value="Open">Open</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Resolved">Resolved</option>
-                    <option value="Closed">Closed</option>
-                  </select>
-                ) : (
-                  <div style={styles.statusReadOnly}>{status}</div>
-                )}
+                <div style={styles.statusReadOnly}>
+                  {status}
+                  <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '8px' }}>
+                    (change from issue detail page)
+                  </span>
+                </div>
               </div>
             </div>
 
