@@ -25,6 +25,7 @@ app.get('/api/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/issues', require('./routes/issueRoutes'));
 
 const PORT = process.env.PORT || 5000;
 

@@ -1,0 +1,62 @@
+const mongoose = require('mongoose');
+
+const issueSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: [true, 'Please provide an issue title'],
+      trim: true,
+      minlength: [3, 'Title must be at least 3 characters'],
+      maxlength: [100, 'Title cannot exceed 100 characters']
+    },
+    description: {
+      type: String,
+      required: [true, 'Please provide an issue description'],
+      trim: true
+    },
+    issueType: {
+      type: String,
+      required: [true, 'Please specify issue type'],
+      enum: {
+        values: ['Bug', 'Task'],
+        message: 'Issue type must be Bug or Task'
+      }
+    },
+    priority: {
+      type: String,
+      required: [true, 'Please specify priority'],
+      enum: {
+        values: ['Low', 'Medium', 'High'],
+        message: 'Priority must be Low, Medium, or High'
+      }
+    },
+    status: {
+      type: String,
+      required: [true, 'Please specify status'],
+      enum: {
+        values: ['Open', 'In Progress', 'Resolved', 'Closed'],
+        message: 'Status must be Open, In Progress, Resolved, or Closed'
+      },
+      default: 'Open'
+    },
+    assignee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    dueDate: {
+      type: Date,
+      default: null
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'Issue must have a creator']
+    }
+  },
+  {
+    timestamps: true
+  }
+);
+
+module.exports = mongoose.model('Issue', issueSchema);

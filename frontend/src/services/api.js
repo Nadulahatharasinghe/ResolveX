@@ -18,4 +18,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// User API helper
+export const getUsers = () => api.get('/auth/users');
+
+// Issues API helpers
+export const getIssues = (params) => api.get('/issues', { params });
+export const getIssueById = (id) => api.get(`/issues/${id}`);
+export const createIssue = (issueData) => api.post('/issues', issueData);
+export const updateIssue = (id, issueData) => api.put(`/issues/${id}`, issueData);
+export const deleteIssue = (id) => api.delete(`/issues/${id}`);
+
 export default api;

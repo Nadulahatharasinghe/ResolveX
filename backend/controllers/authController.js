@@ -152,3 +152,23 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
+// @desc    Get all users for assignee selection
+// @route   GET /api/auth/users
+// @access  Private
+exports.getUsers = async (req, res) => {
+  try {
+    const users = await User.find({}).select('_id name email').sort({ name: 1 });
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error('GetUsers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
