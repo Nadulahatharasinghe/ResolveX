@@ -7,71 +7,32 @@ const jwt = require('jsonwebtoken');
 // @access  Public
 exports.register = async (req, res) => {
   try {
-    // SECURITY: only accept name/email/password — role is always forced to 'user'
     const { name, email, password } = req.body;
-
-    // Validate input
     if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide name, email and password'
-      });
+      return res.status(400).json({ success: false, message: 'Please provide name, email and password' });
     }
-
-    // Validate email format
     const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email'
-      });
+      return res.status(400).json({ success: false, message: 'Please provide a valid email' });
     }
-
-    // Validate password length
     if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters'
-      });
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
-
-    // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already registered'
-      });
+      return res.status(400).json({ success: false, message: 'Email already registered' });
     }
-
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user — role is hard-coded to 'user'; client cannot override this
-    const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      role: 'user'
-    });
-
+    const user = await User.create({ name, email: email.toLowerCase(), password: hashedPassword, role: 'user' });
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
     console.error('Register error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -81,56 +42,25 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Validate input
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide email and password'
-      });
+      return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
-
-    // Find user and include password for comparison
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
-
-    // Generate JWT (stores only user id — role is fetched fresh from DB on each request)
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role || 'user'
-      }
+      success: true, token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role || 'user' }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -139,45 +69,101 @@ exports.login = async (req, res) => {
 // @access  Private
 exports.getMe = async (req, res) => {
   try {
-    // req.user is already populated by protect middleware (fresh from DB)
     const user = req.user;
     res.json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role || 'user'
-      }
+      user: { id: user._id, name: user.name, email: user.email, role: user.role || 'user' }
     });
   } catch (error) {
     console.error('GetMe error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Update profile (name, email)
+// @route   PUT /api/auth/profile
+// @access  Private
+exports.updateProfile = async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    const updates = {};
+
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ success: false, message: 'Name cannot be empty' });
+      updates.name = name.trim();
+    }
+
+    if (email !== undefined) {
+      const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ success: false, message: 'Please provide a valid email' });
+      }
+      const lc = email.toLowerCase().trim();
+      // Check if email already taken by another user
+      const existing = await User.findOne({ email: lc });
+      if (existing && existing._id.toString() !== req.user._id.toString()) {
+        return res.status(400).json({ success: false, message: 'Email already in use' });
+      }
+      updates.email = lc;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No fields to update' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true });
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
     });
+  } catch (error) {
+    console.error('UpdateProfile error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Change password
+// @route   PUT /api/auth/change-password
+// @access  Private
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide current and new password' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('ChangePassword error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
 // @desc    Get all users for assignee selection
 // @route   GET /api/auth/users
-// @access  Private (authenticated users — needed for assignee dropdown)
+// @access  Private
 exports.getUsers = async (req, res) => {
   try {
-    // Return only safe fields — never expose password or sensitive data
-    const users = await User.find({})
-      .select('_id name email role')
-      .sort({ name: 1 });
-
-    res.json({
-      success: true,
-      data: users
-    });
+    const users = await User.find({}).select('_id name email role').sort({ name: 1 });
+    res.json({ success: true, data: users });
   } catch (error) {
     console.error('GetUsers error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

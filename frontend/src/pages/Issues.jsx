@@ -1,534 +1,282 @@
 import { useState, useEffect, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import { getIssues, deleteIssue } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
-// Translate HTTP status codes to user-friendly messages
-const getErrorMessage = (err) => {
-  const status = err.response?.status;
-  if (status === 401) return 'You must be logged in to perform this action.';
-  if (status === 403) return 'You do not have permission to perform this action.';
-  if (status === 404) return 'Issue not found.';
-  return err.response?.data?.message || 'An unexpected error occurred.';
+/* ── helpers ─────────────────────────────────────────────────── */
+function Skeleton({ w = '100%', h = 16, radius = 6 }) {
+  return <div className="skeleton" style={{ width: w, height: h, borderRadius: radius }} />;
+}
+
+function SkeletonRow() {
+  return (
+    <tr>
+      <td style={s.tdTitle}><Skeleton h={15} /><div style={{ marginTop: 6 }}><Skeleton h={12} w="70%" /></div></td>
+      <td style={s.td}><Skeleton h={22} w={60} radius={20} /></td>
+      <td style={s.td}><Skeleton h={22} w={60} radius={20} /></td>
+      <td style={s.td}><Skeleton h={22} w={80} radius={20} /></td>
+      <td style={s.td}><Skeleton h={14} w={90} /></td>
+      <td style={s.td}><Skeleton h={14} w={70} /></td>
+      <td style={s.tdActions}><Skeleton h={28} w={120} radius={6} /></td>
+    </tr>
+  );
+}
+
+const typeBadge   = t => t === 'Bug' ? { bg:'#fee2e2', fg:'#991b1b' } : { bg:'#e0f2fe', fg:'#075985' };
+const prioColor   = p => ({ High:['#ffedd5','#9a3412'], Medium:['#fef9c3','#854d0e'], Low:['#dcfce7','#166534'] }[p] || ['#f1f5f9','#475569']);
+const statusStyle = st => {
+  const m = { Open:['#dbeafe','#1e40af'], 'In Progress':['#f3e8ff','#6b21a8'], Resolved:['#d1fae5','#065f46'], Closed:['#e2e8f0','#475569'] };
+  const [bg,fg] = m[st] || ['#f1f5f9','#475569'];
+  return { backgroundColor:bg, color:fg };
 };
 
-const Issues = () => {
+/* ── delete confirmation modal ───────────────────────────────── */
+function DeleteModal({ title, onConfirm, onCancel, loading }) {
+  return (
+    <motion.div style={s.overlay} initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}>
+      <motion.div style={s.modal} initial={{ scale:0.88, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.88, opacity:0 }} transition={{ duration:0.2 }}>
+        <div style={s.modalIcon}>🗑️</div>
+        <h3 style={s.modalTitle}>Delete Issue</h3>
+        <p style={s.modalBody}>Are you sure you want to delete <strong>"{title}"</strong>? This cannot be undone.</p>
+        <div style={s.modalBtns}>
+          <button style={s.modalCancel} onClick={onCancel} disabled={loading}>Cancel</button>
+          <button style={{ ...s.modalConfirm, ...(loading ? s.btnDis : {}) }} onClick={onConfirm} disabled={loading}>
+            {loading ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ── main component ──────────────────────────────────────────── */
+export default function Issues() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useContext(AuthContext);
   const isAdmin = user?.role === 'admin';
 
-  const [issues, setIssues] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Search & Filter State
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
+  const [issues, setIssues]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState('');
+  const [status, setStatus]       = useState(searchParams.get('status') || '');
+  const [priority, setPriority]   = useState(searchParams.get('priority') || '');
   const [issueType, setIssueType] = useState('');
 
-  const fetchIssuesList = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const params = {};
-      if (search.trim()) params.search = search.trim();
-      if (status) params.status = status;
-      if (priority) params.priority = priority;
-      if (issueType) params.issueType = issueType;
+  // Delete modal
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, title }
+  const [deleting, setDeleting]         = useState(false);
 
+  const fetchList = async (params = {}) => {
+    setLoading(true);
+    try {
       const res = await getIssues(params);
-      setIssues(res.data.data);
+      setIssues(res.data.data || []);
     } catch (err) {
-      console.error('Fetch issues error:', err);
-      setError(getErrorMessage(err));
+      toast.error(err.response?.data?.message || 'Failed to load issues');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchIssuesList();
+    const p = {};
+    if (status)    p.status    = status;
+    if (priority)  p.priority  = priority;
+    if (issueType) p.issueType = issueType;
+    if (search.trim()) p.search = search.trim();
+    fetchList(p);
   }, [status, priority, issueType]);
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    fetchIssuesList();
-  };
+  const handleSearch = (e) => { e.preventDefault(); const p = {}; if (search.trim()) p.search = search.trim(); if (status) p.status = status; if (priority) p.priority = priority; if (issueType) p.issueType = issueType; fetchList(p); };
 
-  const handleClearFilters = () => {
-    setSearch('');
-    setStatus('');
-    setPriority('');
-    setIssueType('');
-  };
+  const clearFilters = () => { setSearch(''); setStatus(''); setPriority(''); setIssueType(''); fetchList({}); };
 
-  const handleDelete = async (id, title, createdById) => {
-    const currentUserId = user?._id || user?.id;
-    const canDelete = isAdmin || createdById === currentUserId;
-
-    if (!canDelete) {
-      setError('Only the issue creator or an admin can delete this issue.');
-      return;
-    }
-
-    if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
-      try {
-        await deleteIssue(id);
-        setSuccessMsg('Issue deleted successfully');
-        setIssues(issues.filter((issue) => issue._id !== id));
-        setTimeout(() => setSuccessMsg(''), 3000);
-      } catch (err) {
-        setError(getErrorMessage(err));
-      }
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteIssue(deleteTarget.id);
+      setIssues(prev => prev.filter(i => i._id !== deleteTarget.id));
+      toast.success('Issue deleted');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete issue');
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const getTypeBadgeStyle = (type) => {
-    return type === 'Bug'
-      ? { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #f87171' }
-      : { backgroundColor: '#e0f2fe', color: '#075985', border: '1px solid #38bdf8' };
-  };
-
-  const getPriorityBadgeStyle = (prio) => {
-    switch (prio) {
-      case 'High':
-        return { backgroundColor: '#ffedd5', color: '#9a3412', border: '1px solid #fb923c' };
-      case 'Medium':
-        return { backgroundColor: '#fef9c3', color: '#854d0e', border: '1px solid #facc15' };
-      case 'Low':
-        return { backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #4ade80' };
-      default:
-        return { backgroundColor: '#f1f5f9', color: '#475569' };
-    }
-  };
-
-  const getStatusBadgeStyle = (st) => {
-    switch (st) {
-      case 'Open':
-        return { backgroundColor: '#dbeafe', color: '#1e40af' };
-      case 'In Progress':
-        return { backgroundColor: '#f3e8ff', color: '#6b21a8' };
-      case 'Resolved':
-        return { backgroundColor: '#d1fae5', color: '#065f46' };
-      case 'Closed':
-        return { backgroundColor: '#e2e8f0', color: '#475569' };
-      default:
-        return { backgroundColor: '#f1f5f9', color: '#475569' };
-    }
-  };
+  const hasFilters = search || status || priority || issueType;
 
   return (
     <div>
       <Navbar />
-      <div style={styles.pageContainer}>
-        <div style={styles.headerRow}>
+      <AnimatePresence>
+        {deleteTarget && (
+          <DeleteModal
+            title={deleteTarget.title}
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteTarget(null)}
+            loading={deleting}
+          />
+        )}
+      </AnimatePresence>
+
+      <div style={s.page} className="page-enter">
+        {/* Header */}
+        <div style={s.header}>
           <div>
-            <h1 style={styles.pageTitle}>Issue Tracker</h1>
-            <p style={styles.pageSubtitle}>Manage and track your software development issues</p>
+            <h1 style={s.pageTitle}>Issue Tracker</h1>
+            <p style={s.pageSub}>Manage and track your software issues</p>
           </div>
-          <Link to="/create-issue" style={styles.createBtn} id="create-issue-btn">
-            + Create New Issue
-          </Link>
+          <Link to="/create-issue" style={s.createBtn}>+ New Issue</Link>
         </div>
 
-        {error && <div style={styles.errorBanner}>{error}</div>}
-        {successMsg && <div style={styles.successBanner}>{successMsg}</div>}
-
-        {/* Search & Filter Toolbar */}
-        <div style={styles.toolbar}>
-          <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
-            <input
-              type="text"
-              placeholder="Search title or description..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={styles.searchInput}
-              id="search-input"
-            />
-            <button type="submit" style={styles.searchBtn} id="search-submit">
-              Search
-            </button>
+        {/* Search + filters toolbar */}
+        <div style={s.toolbar}>
+          <form onSubmit={handleSearch} style={s.searchRow}>
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search title or description…" style={s.searchInput} />
+            <button type="submit" style={s.searchBtn}>Search</button>
           </form>
-
-          <div style={styles.filterGroup}>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              style={styles.selectInput}
-              id="status-filter"
-            >
-              <option value="">Status: All</option>
-              <option value="Open">Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Resolved">Resolved</option>
-              <option value="Closed">Closed</option>
-            </select>
-
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              style={styles.selectInput}
-              id="priority-filter"
-            >
-              <option value="">Priority: All</option>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-
-            <select
-              value={issueType}
-              onChange={(e) => setIssueType(e.target.value)}
-              style={styles.selectInput}
-              id="type-filter"
-            >
-              <option value="">Type: All</option>
-              <option value="Bug">Bug</option>
-              <option value="Task">Task</option>
-            </select>
-
-            {(search || status || priority || issueType) && (
-              <button onClick={handleClearFilters} style={styles.clearBtn} id="clear-filters-btn">
-                Clear Filters
-              </button>
+          <div style={s.filterRow}>
+            {[
+              { val: status,    set: setStatus,    placeholder: 'Status: All',   options: ['Open','In Progress','Resolved','Closed'] },
+              { val: priority,  set: setPriority,  placeholder: 'Priority: All', options: ['Low','Medium','High'] },
+              { val: issueType, set: setIssueType, placeholder: 'Type: All',     options: ['Bug','Task'] },
+            ].map(({ val, set, placeholder, options }) => (
+              <select key={placeholder} value={val} onChange={e => set(e.target.value)} style={s.select}>
+                <option value="">{placeholder}</option>
+                {options.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ))}
+            {hasFilters && (
+              <button onClick={clearFilters} style={s.clearBtn}>✕ Clear</button>
             )}
           </div>
         </div>
 
-        {/* Issues List / Table */}
-        {loading ? (
-          <div style={styles.loadingBox}>
-            <p>Loading issues...</p>
-          </div>
-        ) : issues.length === 0 ? (
-          <div style={styles.emptyBox}>
-            <h3>No issues found</h3>
-            <p style={{ color: '#64748b', marginTop: '6px' }}>
-              Try adjusting your search criteria or create a new issue.
-            </p>
-          </div>
-        ) : (
-          <div style={styles.tableCard}>
-            <div style={styles.tableWrapper}>
-              <table style={styles.table}>
-                <thead>
-                  <tr style={styles.thRow}>
-                    <th style={styles.th}>Title</th>
-                    <th style={styles.th}>Type</th>
-                    <th style={styles.th}>Priority</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Assignee</th>
-                    <th style={styles.th}>Created</th>
-                    <th style={styles.th}>Actions</th>
+        {/* Table */}
+        <div style={s.tableCard}>
+          <div style={s.tableWrap}>
+            <table style={s.table}>
+              <thead>
+                <tr style={s.thead}>
+                  {['Title','Type','Priority','Status','Assignee','Created','Actions'].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+                ) : issues.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: 0, border: 'none' }}>
+                      <div style={s.empty}>
+                        <span style={s.emptyIcon}>{hasFilters ? '🔍' : '📭'}</span>
+                        <p style={s.emptyTitle}>{hasFilters ? 'No matching issues' : 'No issues yet'}</p>
+                        <p style={s.emptySub}>{hasFilters ? 'Try adjusting your filters.' : 'Create your first issue to get started.'}</p>
+                        {hasFilters
+                          ? <button style={s.emptyBtn} onClick={clearFilters}>Clear Filters</button>
+                          : <Link to="/create-issue" style={s.emptyBtn}>+ Create Issue</Link>}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {issues.map((issue) => {
-                    const creatorId = issue.createdBy?._id || issue.createdBy;
-                    const currentUserId = user?._id || user?.id;
-                    const isOwner = creatorId?.toString() === currentUserId?.toString();
-                    const canEdit   = isAdmin || isOwner;
-                    const canDelete = isAdmin || isOwner;
+                ) : (
+                  <AnimatePresence>
+                    {issues.map((issue, idx) => {
+                      const creatorId    = issue.createdBy?._id || issue.createdBy;
+                      const currentUserId = user?._id || user?.id;
+                      const isOwner  = creatorId?.toString() === currentUserId?.toString();
+                      const canEdit  = isAdmin || isOwner;
+                      const canDelete = isAdmin || isOwner;
+                      const [pBg, pFg] = prioColor(issue.priority);
+                      const { bg: tBg, fg: tFg } = typeBadge(issue.issueType);
 
-                    return (
-                      <tr key={issue._id} style={styles.tr}>
-                        <td style={styles.tdTitle}>
-                          <Link to={`/issues/${issue._id}`} style={styles.issueTitleLink}>
-                            {issue.title}
-                          </Link>
-                          <div style={styles.descSnippet}>
-                            {issue.description.length > 70
-                              ? issue.description.substring(0, 70) + '...'
-                              : issue.description}
-                          </div>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.badge, ...getTypeBadgeStyle(issue.issueType) }}>
-                            {issue.issueType}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.badge, ...getPriorityBadgeStyle(issue.priority) }}>
-                            {issue.priority}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{ ...styles.badge, ...getStatusBadgeStyle(issue.status) }}>
-                            {issue.status}
-                          </span>
-                        </td>
-                        <td style={styles.td}>
-                          {issue.assignee ? (
-                            <span style={styles.assigneeName}>{issue.assignee.name}</span>
-                          ) : (
-                            <span style={styles.unassigned}>Unassigned</span>
-                          )}
-                        </td>
-                        <td style={styles.tdDate}>
-                          {new Date(issue.createdAt).toLocaleDateString()}
-                        </td>
-                        <td style={styles.tdActions}>
-                          <button
-                            onClick={() => navigate(`/issues/${issue._id}`)}
-                            style={styles.viewActionBtn}
-                          >
-                            View
-                          </button>
-                          {canEdit && (
-                            <button
-                              onClick={() => navigate(`/issues/${issue._id}/edit`)}
-                              style={styles.editActionBtn}
-                            >
-                              Edit
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={() => handleDelete(issue._id, issue.title, creatorId)}
-                              style={styles.deleteActionBtn}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <motion.tr key={issue._id} style={s.tr}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ delay: idx * 0.04, duration: 0.22 }}
+                          className="table-row-hover"
+                        >
+                          <td style={s.tdTitle}>
+                            <Link to={`/issues/${issue._id}`} style={s.issueLink}>{issue.title}</Link>
+                            <div style={s.desc}>{issue.description.length > 60 ? issue.description.slice(0,60)+'…' : issue.description}</div>
+                          </td>
+                          <td style={s.td}><span style={{ ...s.badge, backgroundColor: tBg, color: tFg }}>{issue.issueType}</span></td>
+                          <td style={s.td}><span style={{ ...s.badge, backgroundColor: pBg, color: pFg }}>{issue.priority}</span></td>
+                          <td style={s.td}><span style={{ ...s.badge, ...statusStyle(issue.status) }}>{issue.status}</span></td>
+                          <td style={s.td}>{issue.assignee ? <span style={s.assignee}>{issue.assignee.name}</span> : <span style={s.unassigned}>—</span>}</td>
+                          <td style={s.tdDate}>{new Date(issue.createdAt).toLocaleDateString()}</td>
+                          <td style={s.tdActions}>
+                            <button onClick={() => navigate(`/issues/${issue._id}`)} style={s.btnView}>View</button>
+                            {canEdit   && <button onClick={() => navigate(`/issues/${issue._id}/edit`)} style={s.btnEdit}>Edit</button>}
+                            {canDelete && <button onClick={() => setDeleteTarget({ id: issue._id, title: issue.title })} style={s.btnDel}>Delete</button>}
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                  </AnimatePresence>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
-};
+}
 
-const styles = {
-  pageContainer: {
-    maxWidth: '1100px',
-    margin: '30px auto',
-    padding: '0 20px'
-  },
-  headerRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '25px',
-    flexWrap: 'wrap',
-    gap: '15px'
-  },
-  pageTitle: {
-    fontSize: '28px',
-    fontWeight: 'bold',
-    color: '#0f172a'
-  },
-  pageSubtitle: {
-    color: '#64748b',
-    fontSize: '14px',
-    marginTop: '4px'
-  },
-  createBtn: {
-    backgroundColor: '#4f46e5',
-    color: '#ffffff',
-    padding: '10px 20px',
-    borderRadius: '8px',
-    textDecoration: 'none',
-    fontWeight: '600',
-    fontSize: '14px',
-    boxShadow: '0 2px 4px rgba(79, 70, 229, 0.2)'
-  },
-  errorBanner: {
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    padding: '12px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    fontSize: '14px'
-  },
-  successBanner: {
-    backgroundColor: '#d1fae5',
-    color: '#059669',
-    padding: '12px',
-    borderRadius: '8px',
-    marginBottom: '20px',
-    fontSize: '14px'
-  },
-  toolbar: {
-    backgroundColor: '#ffffff',
-    padding: '16px',
-    borderRadius: '10px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    marginBottom: '25px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px'
-  },
-  searchForm: {
-    display: 'flex',
-    gap: '10px'
-  },
-  searchInput: {
-    flex: 1,
-    padding: '10px 14px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    fontSize: '14px',
-    outline: 'none'
-  },
-  searchBtn: {
-    padding: '10px 20px',
-    backgroundColor: '#334155',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontWeight: '500'
-  },
-  filterGroup: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap',
-    alignItems: 'center'
-  },
-  selectInput: {
-    padding: '8px 12px',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    fontSize: '14px',
-    backgroundColor: '#fff',
-    outline: 'none'
-  },
-  clearBtn: {
-    padding: '8px 14px',
-    backgroundColor: '#f1f5f9',
-    color: '#475569',
-    border: '1px solid #cbd5e1',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  tableCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: '10px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-    overflow: 'hidden'
-  },
-  tableWrapper: {
-    overflowX: 'auto'
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    textAlign: 'left'
-  },
-  thRow: {
-    backgroundColor: '#f8fafc',
-    borderBottom: '1px solid #e2e8f0'
-  },
-  th: {
-    padding: '14px 16px',
-    fontSize: '13px',
-    fontWeight: '600',
-    color: '#475569',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-  tr: {
-    borderBottom: '1px solid #f1f5f9',
-    transition: 'background-color 0.15s'
-  },
-  tdTitle: {
-    padding: '14px 16px',
-    minWidth: '220px'
-  },
-  issueTitleLink: {
-    fontSize: '15px',
-    fontWeight: '600',
-    color: '#1e293b',
-    textDecoration: 'none'
-  },
-  descSnippet: {
-    fontSize: '13px',
-    color: '#64748b',
-    marginTop: '3px'
-  },
-  td: {
-    padding: '14px 16px',
-    fontSize: '14px',
-    whiteSpace: 'nowrap'
-  },
-  tdDate: {
-    padding: '14px 16px',
-    fontSize: '13px',
-    color: '#64748b',
-    whiteSpace: 'nowrap'
-  },
-  tdActions: {
-    padding: '14px 16px',
-    whiteSpace: 'nowrap'
-  },
-  badge: {
-    display: 'inline-block',
-    padding: '4px 10px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: '600'
-  },
-  assigneeName: {
-    color: '#334155',
-    fontWeight: '500'
-  },
-  unassigned: {
-    color: '#94a3b8',
-    fontStyle: 'italic'
-  },
-  viewActionBtn: {
-    padding: '5px 10px',
-    backgroundColor: '#e0f2fe',
-    color: '#0369a1',
-    border: 'none',
-    borderRadius: '4px',
-    marginRight: '6px',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  editActionBtn: {
-    padding: '5px 10px',
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
-    border: 'none',
-    borderRadius: '4px',
-    marginRight: '6px',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  deleteActionBtn: {
-    padding: '5px 10px',
-    backgroundColor: '#fee2e2',
-    color: '#b91c1c',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  loadingBox: {
-    textAlign: 'center',
-    padding: '40px',
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    color: '#64748b'
-  },
-  emptyBox: {
-    textAlign: 'center',
-    padding: '50px',
-    backgroundColor: '#fff',
-    borderRadius: '8px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-  }
+const s = {
+  page:       { maxWidth: '1200px', margin: '0 auto', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: '20px' },
+  header:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' },
+  pageTitle:  { fontSize: '26px', fontWeight: '800', color: '#0f172a' },
+  pageSub:    { fontSize: '14px', color: '#64748b', marginTop: '2px' },
+  createBtn:  { backgroundColor: '#4f46e5', color: '#fff', padding: '10px 20px', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '14px', boxShadow: '0 2px 8px rgba(79,70,229,0.25)' },
+  toolbar:    { background: '#fff', borderRadius: '12px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' },
+  searchRow:  { display: 'flex', gap: '10px' },
+  searchInput:{ flex: 1, padding: '9px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', backgroundColor: '#fafafa' },
+  searchBtn:  { padding: '9px 20px', backgroundColor: '#334155', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' },
+  filterRow:  { display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' },
+  select:     { padding: '8px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', backgroundColor: '#fff', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' },
+  clearBtn:   { padding: '8px 14px', backgroundColor: '#f1f5f9', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', fontFamily: 'inherit' },
+  tableCard:  { background: '#fff', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', overflow: 'hidden' },
+  tableWrap:  { overflowX: 'auto' },
+  table:      { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
+  thead:      { backgroundColor: '#f8fafc', borderBottom: '1.5px solid #e2e8f0' },
+  th:         { padding: '13px 16px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' },
+  tr:         { borderBottom: '1px solid #f1f5f9' },
+  tdTitle:    { padding: '14px 16px', minWidth: '200px' },
+  td:         { padding: '14px 16px', whiteSpace: 'nowrap' },
+  tdDate:     { padding: '14px 16px', fontSize: '13px', color: '#94a3b8', whiteSpace: 'nowrap' },
+  tdActions:  { padding: '14px 16px', whiteSpace: 'nowrap' },
+  badge:      { display: 'inline-block', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' },
+  issueLink:  { fontSize: '14px', fontWeight: '600', color: '#1e293b', textDecoration: 'none' },
+  desc:       { fontSize: '12px', color: '#94a3b8', marginTop: '3px' },
+  assignee:   { fontSize: '13px', fontWeight: '500', color: '#334155' },
+  unassigned: { fontSize: '13px', color: '#cbd5e1' },
+  btnView:    { padding: '5px 10px', backgroundColor: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '5px', marginRight: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', fontFamily: 'inherit' },
+  btnEdit:    { padding: '5px 10px', backgroundColor: '#fef3c7', color: '#92400e', border: 'none', borderRadius: '5px', marginRight: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', fontFamily: 'inherit' },
+  btnDel:     { padding: '5px 10px', backgroundColor: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', fontFamily: 'inherit' },
+  empty:      { padding: '60px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' },
+  emptyIcon:  { fontSize: '44px' },
+  emptyTitle: { fontSize: '16px', fontWeight: '700', color: '#0f172a' },
+  emptySub:   { fontSize: '14px', color: '#64748b' },
+  emptyBtn:   { marginTop: '6px', padding: '9px 20px', background: '#4f46e5', color: '#fff', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '14px', border: 'none', cursor: 'pointer', fontFamily: 'inherit' },
+  overlay:    { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: '20px' },
+  modal:      { background: '#fff', borderRadius: '16px', padding: '36px 32px', maxWidth: '420px', width: '100%', boxShadow: '0 12px 40px rgba(0,0,0,0.15)', textAlign: 'center' },
+  modalIcon:  { fontSize: '40px', marginBottom: '12px' },
+  modalTitle: { fontSize: '18px', fontWeight: '700', color: '#0f172a', marginBottom: '8px' },
+  modalBody:  { fontSize: '14px', color: '#64748b', marginBottom: '24px', lineHeight: 1.6 },
+  modalBtns:  { display: 'flex', gap: '12px', justifyContent: 'center' },
+  modalCancel:{ padding: '10px 24px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', fontFamily: 'inherit' },
+  modalConfirm:{ padding: '10px 24px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', fontFamily: 'inherit' },
+  btnDis:     { opacity: 0.65, cursor: 'not-allowed' },
 };
-
-export default Issues;

@@ -1,5 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import { getIssueById, deleteIssue, changeStatus } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
@@ -30,7 +32,6 @@ const IssueDetails = () => {
   const [issue, setIssue]           = useState(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   // Status-change modal state
   const [pendingStatus, setPendingStatus] = useState('');   // new status user picked
@@ -75,8 +76,7 @@ const IssueDetails = () => {
     try {
       const res = await changeStatus(id, pendingStatus, statusComment.trim());
       setIssue(res.data.data);
-      setSuccessMsg(`Status changed to "${pendingStatus}"`);
-      setTimeout(() => setSuccessMsg(''), 4000);
+      toast.success(`Status changed to "${pendingStatus}"`);
       setShowModal(false);
       setStatusComment('');
     } catch (err) {
@@ -97,9 +97,10 @@ const IssueDetails = () => {
     if (window.confirm(`Are you sure you want to delete "${issue.title}"?`)) {
       try {
         await deleteIssue(id);
+        toast.success('Issue deleted');
         navigate('/issues');
       } catch (err) {
-        setError(getErrorMessage(err));
+        toast.error(getErrorMessage(err));
       }
     }
   };
@@ -184,8 +185,7 @@ const IssueDetails = () => {
           <Link to="/issues" style={styles.backLink}>← Back to All Issues</Link>
         </div>
 
-        {successMsg && <div style={styles.successBanner}>{successMsg}</div>}
-        {error      && <div style={styles.errorBanner}>{error}</div>}
+        {error && <div style={styles.errorBanner}>{error}</div>}
 
         <div style={styles.mainCard}>
           {/* Header row */}

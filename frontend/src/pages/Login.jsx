@@ -1,175 +1,147 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 
-const Login = () => {
+export default function Login() {
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { login, isAuthenticated } = useContext(AuthContext);
 
-  const { email, password } = formData;
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw]     = useState(false);
+  const [errors, setErrors]     = useState({});
+  const [loading, setLoading]   = useState(false);
 
-  const onChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  // Redirect already-authenticated users away from login
+  useEffect(() => {
+    if (isAuthenticated) navigate('/dashboard', { replace: true });
+  }, [isAuthenticated, navigate]);
+
+  const validate = () => {
+    const e = {};
+    if (!email.trim()) e.email = 'Email is required';
+    else if (!/^\S+@\S+\.\S+$/.test(email)) e.email = 'Enter a valid email address';
+    if (!password) e.password = 'Password is required';
+    return e;
   };
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!email || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
-
+  const handleSubmit = async (evt) => {
+    evt.preventDefault();
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setErrors({});
     setLoading(true);
-
     try {
-      const res = await api.post('/auth/login', formData);
+      const res = await api.post('/auth/login', { email, password });
       login(res.data.user, res.data.token);
+      toast.success(`Welcome back, ${res.data.user.name}!`);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const msg = err.response?.data?.message || 'Login failed. Please try again.';
+      toast.error(msg);
+      setErrors({ form: msg });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>ResolveX</h1>
-        <h2 style={styles.subtitle}>Login</h2>
+    <div style={s.page}>
+      <motion.div
+        style={s.card}
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+      >
+        {/* Logo */}
+        <div style={s.logoRow}>
+          <span style={s.logoIcon}>🚀</span>
+          <span style={s.logoText}>ResolveX</span>
+        </div>
+        <h1 style={s.title}>Sign in to your account</h1>
+        <p style={s.sub}>Track and resolve issues faster</p>
 
-        {error && <div style={styles.error}>{error}</div>}
-
-        <form onSubmit={onSubmit} style={styles.form}>
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Email</label>
+        <form onSubmit={handleSubmit} style={s.form} noValidate>
+          {/* Email */}
+          <div style={s.field}>
+            <label style={s.label}>Email address</label>
             <input
               type="email"
-              name="email"
               value={email}
-              onChange={onChange}
-              placeholder="Enter your email"
-              style={styles.input}
+              onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: '' })); }}
+              placeholder="you@example.com"
+              style={{ ...s.input, ...(errors.email ? s.inputErr : {}) }}
+              autoComplete="email"
               id="login-email"
             />
+            {errors.email && <span style={s.errMsg}>{errors.email}</span>}
           </div>
 
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <input
-              type="password"
-              name="password"
-              value={password}
-              onChange={onChange}
-              placeholder="Enter your password"
-              style={styles.input}
-              id="login-password"
-            />
+          {/* Password */}
+          <div style={s.field}>
+            <label style={s.label}>Password</label>
+            <div style={s.pwWrap}>
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })); }}
+                placeholder="Enter your password"
+                style={{ ...s.input, ...s.pwInput, ...(errors.password ? s.inputErr : {}) }}
+                autoComplete="current-password"
+                id="login-password"
+              />
+              <button type="button" style={s.eyeBtn} onClick={() => setShowPw(v => !v)} tabIndex={-1} aria-label="Toggle password visibility">
+                {showPw ? '🙈' : '👁️'}
+              </button>
+            </div>
+            {errors.password && <span style={s.errMsg}>{errors.password}</span>}
           </div>
 
-          <button type="submit" style={styles.button} disabled={loading} id="login-submit">
-            {loading ? 'Logging in...' : 'Login'}
-          </button>
+          <motion.button
+            type="submit"
+            style={{ ...s.btn, ...(loading ? s.btnDisabled : {}) }}
+            disabled={loading}
+            whileHover={!loading ? { scale: 1.02 } : {}}
+            whileTap={!loading ? { scale: 0.98 } : {}}
+            id="login-submit"
+          >
+            {loading ? <span style={s.spinner} /> : null}
+            {loading ? 'Signing in…' : 'Sign In'}
+          </motion.button>
         </form>
 
-        <p style={styles.link}>
-          Don't have an account? <Link to="/register" style={styles.anchor}>Register</Link>
+        <p style={s.footer}>
+          Don't have an account?{' '}
+          <Link to="/register" style={s.link}>Create one</Link>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
-};
+}
 
-const styles = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f5f5f5',
-    padding: '20px'
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: '40px',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    width: '100%',
-    maxWidth: '400px'
-  },
-  title: {
-    textAlign: 'center',
-    color: '#333',
-    marginBottom: '5px',
-    fontSize: '28px'
-  },
-  subtitle: {
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: '25px',
-    fontSize: '18px',
-    fontWeight: 'normal'
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px'
-  },
-  inputGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '5px'
-  },
-  label: {
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#333'
-  },
-  input: {
-    padding: '10px 12px',
-    border: '1px solid #ddd',
-    borderRadius: '6px',
-    fontSize: '14px',
-    outline: 'none',
-    transition: 'border-color 0.2s'
-  },
-  button: {
-    padding: '12px',
-    backgroundColor: '#4f46e5',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    fontSize: '16px',
-    cursor: 'pointer',
-    marginTop: '10px'
-  },
-  error: {
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    padding: '10px',
-    borderRadius: '6px',
-    marginBottom: '15px',
-    fontSize: '14px'
-  },
-  link: {
-    textAlign: 'center',
-    marginTop: '20px',
-    color: '#666',
-    fontSize: '14px'
-  },
-  anchor: {
-    color: '#4f46e5',
-    textDecoration: 'none'
-  }
+const s = {
+  page:       { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#eef2ff 0%,#f8fafc 60%,#f0fdf4 100%)', padding: '20px' },
+  card:       { background: '#fff', borderRadius: '16px', boxShadow: '0 8px 40px rgba(79,70,229,0.10)', padding: '44px 40px', width: '100%', maxWidth: '420px' },
+  logoRow:    { display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', marginBottom: '20px' },
+  logoIcon:   { fontSize: '28px' },
+  logoText:   { fontSize: '22px', fontWeight: '800', color: '#4f46e5', letterSpacing: '-0.5px' },
+  title:      { textAlign: 'center', fontSize: '20px', fontWeight: '700', color: '#0f172a', marginBottom: '4px' },
+  sub:        { textAlign: 'center', fontSize: '14px', color: '#64748b', marginBottom: '28px' },
+  form:       { display: 'flex', flexDirection: 'column', gap: '18px' },
+  field:      { display: 'flex', flexDirection: 'column', gap: '5px' },
+  label:      { fontSize: '13px', fontWeight: '600', color: '#374151' },
+  input:      { padding: '10px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', fontFamily: 'inherit', outline: 'none', transition: 'border-color 0.18s', width: '100%', backgroundColor: '#fafafa' },
+  inputErr:   { borderColor: '#ef4444', backgroundColor: '#fff5f5' },
+  pwWrap:     { position: 'relative', display: 'flex', alignItems: 'center' },
+  pwInput:    { paddingRight: '44px' },
+  eyeBtn:     { position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '4px' },
+  errMsg:     { fontSize: '12px', color: '#ef4444', marginTop: '2px' },
+  btn:        { marginTop: '6px', padding: '12px', background: 'linear-gradient(135deg,#4f46e5,#6366f1)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontFamily: 'inherit' },
+  btnDisabled:{ opacity: 0.7, cursor: 'not-allowed' },
+  spinner:    { width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' },
+  footer:     { textAlign: 'center', marginTop: '22px', fontSize: '14px', color: '#64748b' },
+  link:       { color: '#4f46e5', fontWeight: '600', textDecoration: 'none' },
 };
-
-export default Login;

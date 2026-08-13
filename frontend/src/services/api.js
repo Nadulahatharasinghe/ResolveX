@@ -19,8 +19,9 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-// Get all users for assignee dropdown (authenticated users)
-export const getUsers = () => api.get('/auth/users');
+export const getUsers       = ()       => api.get('/auth/users');
+export const updateProfile  = (data)   => api.put('/auth/profile', data);
+export const changePassword = (data)   => api.put('/auth/change-password', data);
 
 // ── Issues ────────────────────────────────────────────────────────────────────
 export const getIssues    = (params)       => api.get('/issues', { params });

@@ -30,8 +30,11 @@ export const AuthProvider = ({ children }) => {
   const login = (userData, userToken) => {
     localStorage.setItem('token', userToken);
     setToken(userToken);
-    setUser(userData); // userData includes role from login response
+    setUser(userData);
   };
+
+  // Update user data in context (e.g. after profile save)
+  const updateUser = (userData) => setUser(userData);
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -48,6 +51,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user,
         isAdmin: user?.role === 'admin',
         login,
+        updateUser,
         logout
       }}
     >

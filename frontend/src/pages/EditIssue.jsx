@@ -1,5 +1,6 @@
 import { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import { getIssueById, updateIssue, getUsers } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
@@ -106,6 +107,7 @@ const EditIssue = () => {
       };
 
       await updateIssue(id, payload);
+      toast.success('Issue updated successfully!');
       navigate(`/issues/${id}`);
     } catch (err) {
       const status = err.response?.status;

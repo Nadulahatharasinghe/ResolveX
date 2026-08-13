@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import { createIssue, getUsers } from '../services/api';
 
@@ -67,6 +68,7 @@ const CreateIssue = () => {
       };
 
       const res = await createIssue(payload);
+      toast.success('Issue created successfully!');
       const createdId = res.data.data._id;
       navigate(`/issues/${createdId}`);
     } catch (err) {
