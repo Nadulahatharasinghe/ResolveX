@@ -1,0 +1,143 @@
+/* ── Reset ───────────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ── Design tokens ───────────────────────────────────────────── */
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --color-primary:      #4f46e5;
+  --color-primary-dark: #4338ca;
+  --color-primary-light:#eef2ff;
+  --color-danger:       #ef4444;
+  --color-danger-dark:  #dc2626;
+  --color-success:      #10b981;
+  --color-warning:      #f59e0b;
+
+  --color-bg:           #f1f5f9;
+  --color-surface:      #ffffff;
+  --color-border:       #e2e8f0;
+  --color-border-light: #f1f5f9;
+
+  --color-text-primary: #0f172a;
+  --color-text-secondary:#64748b;
+  --color-text-muted:   #94a3b8;
+
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+  --radius-full:9999px;
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.07);
+  --shadow-lg:  0 8px 28px rgba(0,0,0,0.10);
+  --shadow-xl:  0 16px 48px rgba(0,0,0,0.13);
+
+  --transition: 0.18s ease;
+}
+
+/* ── Base ────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* ── Page fade-in ────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: fadeIn 0.28s ease both;
+}
+
+/* ── Skeleton loader ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Button base ─────────────────────────────────────────────── */
+button { cursor: pointer; font-family: var(--font-sans); }
+
+/* ── Focus visible ───────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar (webkit) ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Card hover lift ─────────────────────────────────────────── */
+.card-hover {
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Stat number count animation ─────────────────────────────── */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.count-anim {
+  animation: countUp 0.4s ease both;
+}
+
+/* ── Table row hover ─────────────────────────────────────────── */
+.table-row-hover:hover {
+  background-color: #f8fafc !important;
+}
+
+/* ── Responsive utilities ────────────────────────────────────── */
+@media (max-width: 640px) {
+  .hide-mobile { display: none !important; }
+}
+@media (min-width: 641px) {
+  .show-mobile-only { display: none !important; }
+}
+
+/* ── Spinner keyframe (used by Login/Register buttons) ───────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Input focus ring ────────────────────────────────────────── */
+input:focus, select:focus, textarea:focus {
+  border-color: #4f46e5 !important;
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.12);
+}
+
+/* ── Button transitions ──────────────────────────────────────── */
+button { transition: opacity 0.15s, transform 0.12s; }
+
+/* ── Desktop navbar links — hide mobile hamburger ────────────── */
+@media (min-width: 641px) {
+  .desktop-links { display: flex !important; }
+}
+@media (max-width: 640px) {
+  .desktop-links { display: none !important; }
+}
+
+/* ── Profile grid responsive ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .profile-grid { grid-template-columns: 1fr !important; }
+}
