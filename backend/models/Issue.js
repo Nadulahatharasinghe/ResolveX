@@ -21,6 +21,30 @@ const statusHistorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const attachmentSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    type: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    size: {
+      type: Number,
+      default: 0
+    },
+    dataUrl: {
+      type: String,
+      required: true
+    }
+  },
+  { _id: false }
+);
+
 const issueSchema = new mongoose.Schema(
   {
     title: {
@@ -68,6 +92,10 @@ const issueSchema = new mongoose.Schema(
     dueDate: {
       type: Date,
       default: null
+    },
+    attachments: {
+      type: [attachmentSchema],
+      default: []
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

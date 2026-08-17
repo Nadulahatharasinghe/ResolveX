@@ -7,7 +7,7 @@ const mongoose = require('mongoose');
 // @access  Private
 exports.createIssue = async (req, res) => {
   try {
-    const { title, description, issueType, priority, status, assignee, dueDate } = req.body;
+    const { title, description, issueType, priority, status, assignee, dueDate, attachments } = req.body;
 
     // Input Validation
     if (!title || !description || !issueType || !priority) {
@@ -42,6 +42,34 @@ exports.createIssue = async (req, res) => {
       assigneeId = assignee;
     }
 
+    let normalizedAttachments = [];
+    if (attachments !== undefined) {
+      if (!Array.isArray(attachments)) {
+        return res.status(400).json({ success: false, message: 'Attachments must be sent as an array' });
+      }
+
+      normalizedAttachments = attachments.slice(0, 5).map((attachment, index) => {
+        if (!attachment || typeof attachment !== 'object') {
+          throw new Error(`Attachment ${index + 1} is invalid`);
+        }
+
+        const name = typeof attachment.name === 'string' ? attachment.name.trim() : '';
+        const type = typeof attachment.type === 'string' ? attachment.type.trim() : 'application/octet-stream';
+        const dataUrl = typeof attachment.dataUrl === 'string' ? attachment.dataUrl.trim() : '';
+
+        if (!name || !dataUrl) {
+          throw new Error(`Attachment ${index + 1} is incomplete`);
+        }
+
+        return {
+          name,
+          type,
+          size: Number(attachment.size) || 0,
+          dataUrl
+        };
+      });
+    }
+
     // createdBy is always set from the authenticated user — never from req.body
     const issue = await Issue.create({
       title,
@@ -51,6 +79,7 @@ exports.createIssue = async (req, res) => {
       status: status || 'Open',
       assignee: assigneeId,
       dueDate: dueDate || null,
+      attachments: normalizedAttachments,
       createdBy: req.user._id
     });
 
@@ -330,15 +359,15 @@ exports.changeStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Issue not found' });
     }
 
-    // Any authenticated user can change status — no ownership restriction
-    // But they must be able to see the issue first (ownership check on GET still applies)
     const isAdmin = req.user.role === 'admin';
     const isOwner = issue.createdBy.toString() === req.user._id.toString();
 
-    // Non-owners and non-admins can only change status on issues they can see.
-    // Since GET /api/issues/:id already enforces visibility (only owner or admin can view),
-    // reaching here via normal app flow means the user can see the issue.
-    // We allow all authenticated users to change status — no further restriction.
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only change the status of your own issues'
+      });
+    }
 
     if (issue.status === status) {
       return res.status(400).json({

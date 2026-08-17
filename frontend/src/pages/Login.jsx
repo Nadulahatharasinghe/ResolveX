@@ -7,18 +7,20 @@ import api from '../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useContext(AuthContext);
+  const { login, isAuthenticated, isAdmin } = useContext(AuthContext);
 
-  const [email, setEmail]       = useState('');
+  const [email, setEmail]     = useState('');
   const [password, setPassword] = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [errors, setErrors]     = useState({});
-  const [loading, setLoading]   = useState(false);
+  const [showPw, setShowPw]   = useState(false);
+  const [errors, setErrors]   = useState({});
+  const [loading, setLoading] = useState(false);
 
   // Redirect already-authenticated users away from login
   useEffect(() => {
-    if (isAuthenticated) navigate('/dashboard', { replace: true });
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) {
+      navigate(isAdmin ? '/admin' : '/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, isAdmin, navigate]);
 
   const validate = () => {
     const e = {};
@@ -36,9 +38,11 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      login(res.data.user, res.data.token);
-      toast.success(`Welcome back, ${res.data.user.name}!`);
-      navigate('/dashboard');
+      const userData = res.data.user;
+      login(userData, res.data.token);
+      toast.success(`Welcome back, ${userData.name}!`);
+      // Admins go straight to admin panel
+      navigate(userData?.role === 'admin' ? '/admin' : '/dashboard');
     } catch (err) {
       const msg = err.response?.data?.message || 'Login failed. Please try again.';
       toast.error(msg);
@@ -56,7 +60,6 @@ export default function Login() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: 'easeOut' }}
       >
-        {/* Logo */}
         <div style={s.logoRow}>
           <span style={s.logoIcon}>🚀</span>
           <span style={s.logoText}>ResolveX</span>
@@ -108,7 +111,7 @@ export default function Login() {
             whileTap={!loading ? { scale: 0.98 } : {}}
             id="login-submit"
           >
-            {loading ? <span style={s.spinner} /> : null}
+            {loading && <span style={s.spinner} />}
             {loading ? 'Signing in…' : 'Sign In'}
           </motion.button>
         </form>

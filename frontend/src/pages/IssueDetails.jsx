@@ -16,6 +16,29 @@ const getErrorMessage = (err) => {
 
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Resolved', 'Closed'];
 
+const createAttachmentUrl = (file) => {
+  if (!file?.dataUrl) return '';
+
+  try {
+    const [header, data] = file.dataUrl.split(',');
+    if (!data) return file.dataUrl;
+
+    const mimeMatch = header.match(/^data:(.*?);base64$/i);
+    const mimeType = mimeMatch ? mimeMatch[1] : file.type || 'application/octet-stream';
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const blob = new Blob([bytes], { type: mimeType });
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    return file.dataUrl;
+  }
+};
+
 const statusColors = {
   'Open':        { backgroundColor: '#dbeafe', color: '#1e40af' },
   'In Progress': { backgroundColor: '#f3e8ff', color: '#6b21a8' },
@@ -146,6 +169,7 @@ const IssueDetails = () => {
   const isOwner      = creatorId?.toString() === currentUserId?.toString();
   const canEdit      = isAdmin || isOwner;
   const canDelete    = isAdmin || isOwner;
+  const canChangeStatus = isAdmin || isOwner;
 
   return (
     <div>
@@ -222,19 +246,24 @@ const IssueDetails = () => {
 
           <hr style={styles.divider} />
 
-          {/* Status control — available to ALL authenticated users */}
           <div style={styles.statusBox}>
             <span style={styles.statusLabel}>Current Status:</span>
-            <select
-              value={issue.status}
-              onChange={(e) => handleStatusSelect(e.target.value)}
-              style={styles.statusSelect}
-              id="inline-status-select"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            {canChangeStatus ? (
+              <>
+                <select
+                  value={issue.status}
+                  onChange={(e) => handleStatusSelect(e.target.value)}
+                  style={styles.statusSelect}
+                  id="inline-status-select"
+                >
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <span style={styles.statusReadOnly}>Read-only</span>
+            )}
             <span style={{ ...styles.statusBadge, ...(statusColors[issue.status] || {}) }}>
               {issue.status}
             </span>
@@ -245,6 +274,40 @@ const IssueDetails = () => {
             <h3 style={styles.sectionTitle}>Description</h3>
             <div style={styles.descriptionText}>{issue.description}</div>
           </div>
+
+          {issue.attachments && issue.attachments.length > 0 && (
+            <div style={styles.section}>
+              <h3 style={styles.sectionTitle}>Attachments</h3>
+              <div style={styles.attachmentGrid}>
+                {issue.attachments.map((file, index) => {
+                  const isImage = file.type?.startsWith('image/');
+                  const attachmentUrl = createAttachmentUrl(file);
+
+                  return (
+                    <div key={`${file.name}-${index}`} style={styles.attachmentCard}>
+                      {isImage ? (
+                        <img src={attachmentUrl || file.dataUrl} alt={file.name} style={styles.previewImage} />
+                      ) : (
+                        <div style={styles.filePreviewIcon}>📄</div>
+                      )}
+                      <div style={styles.attachmentInfo}>
+                        <div style={styles.attachmentName}>{file.name}</div>
+                        <a
+                          href={attachmentUrl || file.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={file.name}
+                          style={styles.attachmentLink}
+                        >
+                          Open / Download
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <hr style={styles.divider} />
 
@@ -329,11 +392,19 @@ const styles = {
   divider:          { border: 'none', borderTop: '1px solid #e2e8f0', margin: '25px 0' },
   statusBox:        { backgroundColor: '#f8fafc', padding: '12px 18px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
   statusLabel:      { fontSize: '14px', fontWeight: '600', color: '#334155' },
+  statusReadOnly:   { fontSize: '12px', color: '#64748b', fontWeight: '600', backgroundColor: '#e2e8f0', padding: '4px 8px', borderRadius: '999px' },
   statusSelect:     { padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', backgroundColor: '#fff', outline: 'none', fontWeight: '600', cursor: 'pointer' },
   statusBadge:      { padding: '4px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: '700' },
   section:          { marginTop: '20px' },
   sectionTitle:     { fontSize: '16px', fontWeight: '600', color: '#334155', marginBottom: '12px' },
   descriptionText:  { fontSize: '15px', color: '#1e293b', lineHeight: '1.6', whiteSpace: 'pre-wrap', backgroundColor: '#fafafa', padding: '16px', borderRadius: '8px', border: '1px solid #f1f5f9' },
+  attachmentGrid:   { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' },
+  attachmentCard:   { border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#f8fafc' },
+  previewImage:     { width: '100%', height: '140px', objectFit: 'cover', display: 'block', backgroundColor: '#e2e8f0' },
+  filePreviewIcon:  { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '140px', fontSize: '32px', backgroundColor: '#e2e8f0', color: '#475569' },
+  attachmentInfo:   { padding: '10px 12px' },
+  attachmentName:   { fontSize: '13px', fontWeight: '600', color: '#0f172a', marginBottom: '4px', overflowWrap: 'anywhere' },
+  attachmentLink:   { color: '#4f46e5', textDecoration: 'none', fontWeight: '600', fontSize: '12px' },
   grid:             { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' },
   gridItem:         { display: 'flex', flexDirection: 'column', gap: '4px' },
   metaLabel:        { fontSize: '12px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' },
